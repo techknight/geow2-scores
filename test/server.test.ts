@@ -76,7 +76,10 @@ describe("geow2-scores", () => {
     expect((await phone.post(`/invite/${code}`, { name: "user@example" })).status).toBe(400);
     expect((await phone.post(`/invite/${code}`, { name: "x".repeat(21) })).status).toBe(400);
     expect((await phone.post(`/invite/${code}`, { name: "  Pilot   One " })).status).toBe(302);
-    expect(await (await phone.fetch("/me")).text()).toContain("Pilot One");
+    const welcome = await (await phone.fetch("/me")).text();
+    expect(welcome).toContain("Pilot One");
+    // The address to type into the game, without https:// (the game adds it).
+    expect(welcome).toContain('value="scores.example"');
     const other = new Browser();
     expect((await other.post(`/invite/${code}`, { name: "PILOT ONE" })).status).toBe(400);
     expect((await other.post(`/invite/${code}`, { name: "Copilot" })).status).toBe(302);

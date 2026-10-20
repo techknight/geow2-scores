@@ -1,4 +1,4 @@
-// The server's web pages, made for phones: joining, pairing a device,
+// The server's web pages (phones first, any browser): joining, pairing a device,
 // your own page, and the admin's.
 
 export const MODES = ["Deadline", "Evolved", "Sequence", "Waves", "Pacifism", "King"];
@@ -105,19 +105,25 @@ export function signInPage(group: string, name: string): string {
     group,
     "Sign in",
     `<h1>Sign in as ${esc(name)}</h1>
-<p>This link signs this phone in as <b>${esc(name)}</b>, so you can pair devices and change your name.</p>
+<p>This link signs this browser in as <b>${esc(name)}</b>, so you can pair devices and change your name.</p>
 <form method="post" class="panel"><button type="submit">Sign in</button></form>`,
   );
 }
 
-export const PAIR_STEPS = `<ol>
-<li>In geow2, open <b>Help and options</b>, then <b>Online scores</b>.</li>
+// How to pair, in the order the game asks: the address (without https://,
+// which the game adds), then the code.
+export function pairSteps(origin: string): string {
+  const host = origin.replace(/^https?:\/\//, "");
+  return `<ol>
+<li>In geow2, open <b>Help and options</b>, then <b>Online scores</b>, and enter this server's address:${linkBox(host)}</li>
 <li>Choose <b>Pair this device</b>. The game shows a code and a QR code.</li>
-<li>Scan the QR code with this phone, or open this page's <b>Pair a device</b> and type the code.</li>
+<li>Type the code below, or scan the QR code with a phone signed in to this page.</li>
 </ol>`;
+}
 
 export function mePage(
   group: string,
+  origin: string,
   name: string,
   csrf: string,
   devices: { id: string; name: string; created: number; last_seen: number | null }[],
@@ -136,7 +142,7 @@ export function mePage(
     name,
     `<h1>${esc(name)}</h1>
 ${notice ? `<p>${notice}</p>` : ""}
-<section class="panel"><h2>Pair a device</h2>${PAIR_STEPS}
+<section class="panel"><h2>Pair a device</h2>${pairSteps(origin)}
 <form method="get" action="/pair"><label for="code">Code shown in the game
 <input id="code" name="code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></label>
 <button type="submit">Continue</button></form></section>
@@ -150,7 +156,7 @@ ${error ? `<p class="error">${esc(error)}</p>` : ""}
 <button type="submit">Save</button></form></section>
 <p><a href="/boards">The group's boards</a></p>
 <form method="post" action="/me/signout"><input type="hidden" name="csrf" value="${esc(csrf)}">
-<button class="quiet" type="submit">Sign this phone out</button></form>`,
+<button class="quiet" type="submit">Sign out of this browser</button></form>`,
   );
 }
 
@@ -250,7 +256,7 @@ ${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin
 ${invites ? `<div>${invites}</div>` : ""}</section>
 <section class="panel"><h2>Players</h2>
 ${players ? `<div class="wrap"><table><tr><th>Name</th><th>Games</th><th>Devices</th><th></th></tr>${players}</table></div>` : "<p>Nobody yet.</p>"}
-<p>A sign-in link signs a player's new phone in as them (for example when they lost the old one).</p></section>
+<p>A sign-in link signs a player in on another phone or computer (for example when they lost the old one).</p></section>
 <section class="panel"><h2>Devices</h2>
 ${devices ? `<div class="wrap"><table><tr><th>Player</th><th>Device</th><th>Last sync</th><th></th></tr>${devices}</table></div>` : "<p>None yet.</p>"}</section>
 <section class="panel"><h2>Latest games</h2>

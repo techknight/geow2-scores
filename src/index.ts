@@ -1,6 +1,6 @@
 // geow2-scores: a score server for a group of geow2 players. The game
 // pairs each device to a player (a code shown in the game, confirmed on
-// a signed-in phone), then syncs its games, unlocks and achievements and
+// a signed-in phone or browser), then syncs its games, unlocks and achievements and
 // gets the group's boards back. See README.md.
 
 import { Hono, type Context } from "hono";
@@ -128,7 +128,7 @@ app.get("/invite/:code", async (c) => {
   const s = await session(c);
   if (s?.player) {
     const p = await store.getPlayer(c.env.DB, s.player);
-    if (p) return c.html(pages.message(group(c), "You're already in", `This phone is signed in as <b>${pages.esc(p.name)}</b>.`, `<p><a href="/me">Your page</a></p>`));
+    if (p) return c.html(pages.message(group(c), "You're already in", `This browser is signed in as <b>${pages.esc(p.name)}</b>.`, `<p><a href="/me">Your page</a></p>`));
   }
   const inv = await store.getInvite(c.env.DB, normalizeCode(c.req.param("code")));
   if (!inv || inv.player || inv.uses >= inv.max_uses || inv.expires < Date.now() / 1000)
@@ -181,8 +181,8 @@ const notSignedIn = (c: Context<{ Bindings: Env }>) =>
   c.html(
     pages.message(
       group(c),
-      "This phone isn't signed in",
-      "Open the invite link you were sent on this phone first. If you joined on another phone, ask the group's admin for a sign-in link.",
+      "This browser isn't signed in",
+      "Open the invite link you were sent in this browser first. If you joined in another browser or on another phone, ask the group's admin for a sign-in link.",
     ),
     401,
   );
@@ -195,7 +195,7 @@ app.get("/me", async (c) => {
     : c.req.query("paired")
       ? "Paired. The game picks it up in a moment."
       : "";
-  return c.html(pages.mePage(group(c), s.player.name, s.csrf, await store.listDevices(c.env.DB, s.player.id), notice));
+  return c.html(pages.mePage(group(c), new URL(c.req.url).origin, s.player.name, s.csrf, await store.listDevices(c.env.DB, s.player.id), notice));
 });
 
 app.post("/me/name", async (c) => {
@@ -205,9 +205,9 @@ app.post("/me/name", async (c) => {
   if (!ok) return c.text("Forbidden", 403);
   const devices = await store.listDevices(c.env.DB, s.player.id);
   const checked = checkName(String(body.name ?? ""));
-  if ("error" in checked) return c.html(pages.mePage(group(c), s.player.name, s.csrf, devices, "", checked.error), 400);
+  if ("error" in checked) return c.html(pages.mePage(group(c), new URL(c.req.url).origin, s.player.name, s.csrf, devices, "", checked.error), 400);
   if (!(await store.renamePlayer(c.env.DB, s.player.id, checked.name)))
-    return c.html(pages.mePage(group(c), s.player.name, s.csrf, devices, "", "Someone in the group already has that name."), 400);
+    return c.html(pages.mePage(group(c), new URL(c.req.url).origin, s.player.name, s.csrf, devices, "", "Someone in the group already has that name."), 400);
   return c.redirect("/me");
 });
 
