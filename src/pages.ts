@@ -45,11 +45,14 @@ ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 `;
 
 export function page(group: string, title: string, body: string): string {
+  // "<group> · geow2 scores", or just the one name while the group has the
+  // default (GROUP_NAME unset or "geow2 scores").
+  const label = group.toLowerCase() === "geow2 scores" ? group : `${group} · geow2 scores`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>${esc(title)} · ${esc(group)}</title><style>${STYLE}</style></head>
-<body><main><p class="group">${esc(group)} · geow2 scores</p>${body}</main></body></html>`;
+<title>${esc(title === group ? title : `${title} · ${group}`)}</title><style>${STYLE}</style></head>
+<body><main><p class="group">${esc(label)}</p>${body}</main></body></html>`;
 }
 
 export function message(group: string, title: string, text: string, extra = ""): string {
