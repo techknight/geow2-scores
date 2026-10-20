@@ -1,0 +1,21 @@
+{
+  // One deployment is one group's score server.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "geow2-scores",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      // Created on the first deploy when there is no database_id.
+      "binding": "DB",
+      "database_name": "geow2-scores",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "GROUP_NAME": "geow2 scores"
+  }
+  // ADMIN_SECRET is a secret: `npx wrangler secret put ADMIN_SECRET`
+  // (the Deploy to Cloudflare button asks for it).
+}
