@@ -327,7 +327,9 @@ app.post("/admin/players/:id/signin", (c) =>
 );
 app.post("/admin/players/:id/remove", (c) => adminAction(c, () => store.removePlayer(c.env.DB, c.req.param("id"))));
 app.post("/admin/devices/:id/revoke", (c) => adminAction(c, () => store.revokeDevice(c.env.DB, c.req.param("id"), null)));
-app.post("/admin/scores/:id/remove", (c) => adminAction(c, () => store.removeScore(c.env.DB, c.req.param("id"))));
+app.post("/admin/scores/:seq/remove", (c) =>
+  adminAction(c, () => store.removeScore(c.env.DB, Number.parseInt(c.req.param("seq"), 10) || 0)),
+);
 app.post("/admin/signout", async (c) => {
   const s = await adminSession(c);
   if (s && (await form(c, s)).ok) await store.deleteSession(c.env.DB, s.token);

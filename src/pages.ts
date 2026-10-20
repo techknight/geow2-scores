@@ -209,7 +209,7 @@ export function adminPage(
     players: { id: string; name: string; created: number; devices: number; games: number }[];
     invites: { code: string; player: string | null; name: string | null; expires: number; max_uses: number; uses: number }[];
     devices: { id: string; name: string; created: number; last_seen: number | null; player: string }[];
-    scores: { id: string; mode: number; score: number; time: number; player: string }[];
+    scores: { seq: number; mode: number; score: number; time: number; player: string }[];
   },
   notice = "",
 ): string {
@@ -240,7 +240,7 @@ ${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin
   const scores = data.scores
     .map(
       (s) => `<tr><td>${esc(s.player)}</td><td>${MODES[s.mode] ?? s.mode}</td><td class="num">${s.score.toLocaleString("en-US")}</td>
-<td>${date(s.time)}</td><td>${button(`/admin/scores/${esc(s.id)}/remove`, "Delete")}</td></tr>`,
+<td>${date(s.time)}</td><td>${button(`/admin/scores/${s.seq}/remove`, "Delete")}</td></tr>`,
     )
     .join("");
   return page(

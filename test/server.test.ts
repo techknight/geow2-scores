@@ -141,6 +141,25 @@ describe("geow2-scores", () => {
     expect(revoked.sort()).toEqual([200, 401]);
   });
 
+  it("keeps the same game id for two players apart", async () => {
+    // Rows imported from an earlier scores.txt get ids from their contents,
+    // so two players (or one player invited again) can send the same id.
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const code = await invite(admin, 2);
+    const a = new Browser(), b = new Browser();
+    await a.post(`/invite/${code}`, { name: "Same Score A" });
+    await b.post(`/invite/${code}`, { name: "Same Score B" });
+    const ta = await pair(a, "PC A"), tb = await pair(b, "PC B");
+    const shared = event("feed", 3, 4242);
+    const ra = await (await api("/api/sync", { events: [shared], progress: {}, since: 0 }, ta)).json<any>();
+    const rb = await (await api("/api/sync", { events: [shared], progress: {}, since: 0 }, tb)).json<any>();
+    expect(ra.events).toHaveLength(1);
+    expect(rb.events).toHaveLength(1);
+    const names = rb.boards[3].map((r: any) => r.name).sort();
+    expect(names).toEqual(["Same Score A", "Same Score B"]);
+  });
+
   it("turns away expired invites, unknown codes and missing sessions", async () => {
     const admin = new Browser();
     await admin.post("/admin/login", { secret: "test admin secret" });

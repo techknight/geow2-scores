@@ -317,14 +317,15 @@ export async function boards(db: D1Database, rows = 100): Promise<BoardRow[][]> 
 export async function recentScores(db: D1Database, limit = 50) {
   const r = await db
     .prepare(
-      `SELECT s.id, s.mode, s.score, s.time, p.name AS player FROM scores s JOIN players p ON p.id = s.player
+      `SELECT s.seq, s.mode, s.score, s.time, p.name AS player FROM scores s JOIN players p ON p.id = s.player
        WHERE s.removed = 0 ORDER BY s.seq DESC LIMIT ?`,
     )
     .bind(limit)
-    .all<{ id: string; mode: number; score: number; time: number; player: string }>();
+    .all<{ seq: number; mode: number; score: number; time: number; player: string }>();
   return r.results;
 }
 
-export async function removeScore(db: D1Database, id: string): Promise<void> {
-  await db.prepare("UPDATE scores SET removed = 1 WHERE id = ?").bind(id).run();
+// By the row's seq: a game id is unique only for its player.
+export async function removeScore(db: D1Database, seq: number): Promise<void> {
+  await db.prepare("UPDATE scores SET removed = 1 WHERE seq = ?").bind(seq).run();
 }
