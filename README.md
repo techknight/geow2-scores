@@ -52,8 +52,9 @@ For each player: the name they chose, their paired devices (by the name
 the game gives them), their finished single-player games (mode, score,
 multiplier, date) and their progress (unlocked modes, unlock progress,
 achievements). No email addresses or passwords; device and phone tokens
-are stored only as hashes. The admin can rename or remove players, unpair
-devices and delete scores.
+are stored only as hashes. The admin can rename or remove players, sign
+them out of every browser (a lost phone), unpair devices and delete
+scores.
 
 Scores are trusted as they come from the game: this is for friends, not
 a public leaderboard.

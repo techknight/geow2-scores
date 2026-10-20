@@ -17,10 +17,14 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
-    "@cloudflare/workers-types": "5.20261004.1",
+    "@cloudflare/workers-types": "5.20261008.1",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
-    "wrangler": "4.147.0"
+    "wrangler": "4.149.0"
+  },
+  "overrides": {
+    "undici": "7.29.1",
+    "sharp": "0.35.5"
   },
   "cloudflare": {
     "bindings": {
@@ -34,7 +38,8 @@
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true,
     "workerd@1.20260815.1": true,
-    "workerd@1.20261001.1": true
+    "workerd@1.20261006.1": true
   }
 }
