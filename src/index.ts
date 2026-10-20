@@ -133,7 +133,7 @@ app.get("/invite/:code", async (c) => {
   const inv = await store.getInvite(c.env.DB, normalizeCode(c.req.param("code")));
   if (!inv || inv.player || inv.uses >= inv.max_uses || inv.expires < Date.now() / 1000)
     return c.html(pages.message(group(c), "This invite has expired", "Ask the person who sent it for a new one."), 404);
-  return c.html(pages.invitePage(group(c), inv.code));
+  return c.html(pages.invitePage(group(c), new URL(c.req.url).origin, inv.code));
 });
 
 app.post("/invite/:code", async (c) => {
@@ -142,13 +142,14 @@ app.post("/invite/:code", async (c) => {
   if (!inv || inv.player) return c.html(pages.message(group(c), "This invite has expired", "Ask the person who sent it for a new one."), 404);
   const body = await c.req.parseBody();
   const checked = checkName(String(body.name ?? ""));
-  if ("error" in checked) return c.html(pages.invitePage(group(c), code, checked.error, String(body.name ?? "")), 400);
+  const origin = new URL(c.req.url).origin;
+  if ("error" in checked) return c.html(pages.invitePage(group(c), origin, code, checked.error, String(body.name ?? "")), 400);
   if (!(await store.useInvite(c.env.DB, code)))
     return c.html(pages.message(group(c), "This invite has expired", "Ask the person who sent it for a new one."), 404);
   const player = await store.createPlayer(c.env.DB, checked.name);
   if (!player) {
     await store.refundInvite(c.env.DB, code);
-    return c.html(pages.invitePage(group(c), code, "Someone in the group already has that name.", checked.name), 400);
+    return c.html(pages.invitePage(group(c), origin, code, "Someone in the group already has that name.", checked.name), 400);
   }
   startSession(c, await store.createSession(c.env.DB, player.id, false), false);
   return c.redirect("/me?welcome=1");
@@ -182,7 +183,7 @@ const notSignedIn = (c: Context<{ Bindings: Env }>) =>
     pages.message(
       group(c),
       "This browser isn't signed in",
-      "Open the invite link you were sent in this browser first. If you joined in another browser or on another phone, ask the group's admin for a sign-in link.",
+      "Open the invite link you were sent in this browser first. If you joined on a computer, open your page there and choose Show a code for my phone; otherwise ask the group's admin for a sign-in link.",
     ),
     401,
   );
@@ -217,6 +218,15 @@ app.post("/me/devices/:id/revoke", async (c) => {
   if (!(await form(c, s)).ok) return c.text("Forbidden", 403);
   await store.revokeDevice(c.env.DB, c.req.param("id"), s.player.id);
   return c.redirect("/me");
+});
+
+// A one-time sign-in link for your own phone (one use, a day), shown as a QR code.
+app.post("/me/phone", async (c) => {
+  const s = await playerSession(c);
+  if (!s) return notSignedIn(c);
+  if (!(await form(c, s)).ok) return c.text("Forbidden", 403);
+  const code = await store.createInvite(c.env.DB, 1, 1, s.player.id);
+  return c.html(pages.phonePage(group(c), s.player.name, `${new URL(c.req.url).origin}/signin/${code}`));
 });
 
 app.post("/me/signout", async (c) => {
@@ -307,8 +317,10 @@ app.post("/admin/invites", (c) =>
   adminAction(c, async (b) => {
     const uses = clamp(b.uses, 1, 100, 5), days = clamp(b.days, 1, 365, 14);
     const code = await store.createInvite(c.env.DB, days, uses);
+    const url = `${new URL(c.req.url).origin}/invite/${code}`;
+    // The admin joins too: the QR code opens the invite on their own phone.
     return `New invite link, for ${uses} ${uses === 1 ? "person" : "people"}, valid for ${days} ${days === 1 ? "day" : "days"}:` +
-      pages.linkBox(`${new URL(c.req.url).origin}/invite/${code}`);
+      pages.linkBox(url) + `<span class="computer-only">To join yourself, scan this with your phone:${pages.qrSvg(url, "QR code of the invite link")}</span>`;
   }),
 );
 app.post("/admin/invites/:code/delete", (c) => adminAction(c, () => store.deleteInvite(c.env.DB, c.req.param("code"))));

@@ -1,6 +1,8 @@
 // The server's web pages (phones first, any browser): joining, pairing a device,
 // your own page, and the admin's.
 
+import qrcode from "qrcode-generator";
+
 export const MODES = ["Deadline", "Evolved", "Sequence", "Waves", "Pacifism", "King"];
 
 export function esc(s: unknown): string {
@@ -47,7 +49,25 @@ ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 .link button { padding: 6px 14px; flex: none; }
 .invite { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--edge); }
 .invite .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--dim); font-size: 14px; }
+.qr { display: block; width: 200px; height: 200px; border-radius: 4px; }
+.tip { border-color: var(--glow); }
+/* What only helps on a computer: getting from there to your phone. */
+@media (hover: none), (pointer: coarse) { .computer-only { display: none; } }
 `;
+
+// A QR code as inline SVG: dark modules on white with the standard four-module
+// margin, which phone cameras need.
+export function qrSvg(text: string, label: string): string {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount(), size = n + 8;
+  let path = "";
+  for (let row = 0; row < n; row++)
+    for (let col = 0; col < n; col++) if (qr.isDark(row, col)) path += `M${col + 4} ${row + 4}h1v1h-1z`;
+  return `<svg class="qr" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(label)}" shape-rendering="crispEdges">` +
+    `<rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+}
 
 // Copy buttons for .link boxes (the clipboard needs https, which the
 // deployed server has; otherwise the text is selected for copying by hand).
@@ -85,12 +105,18 @@ export function message(group: string, title: string, text: string, extra = ""):
 
 // --- Players -------------------------------------------------------------------
 
-export function invitePage(group: string, code: string, error = "", name = ""): string {
+// The browser you join in is the one that confirms each device you pair, by
+// scanning the QR code the game shows: so the page steers computers to a phone.
+export function invitePage(group: string, origin: string, code: string, error = "", name = ""): string {
   return page(
     group,
     "Join",
     `<h1>Join ${esc(group)}</h1>
 <p>You've been invited to share geow2 high scores with this group. Choose the name the others will see on the boards.</p>
+<section class="panel tip computer-only"><h2>Join on your phone</h2>
+<p>The browser you join in is the one that pairs your devices: each PC or Steam Deck shows a QR code, and you scan it.
+With your phone that's one scan; on a computer you'd type a code each time. Scan this to join on your phone instead:</p>
+${qrSvg(`${origin}/invite/${code}`, "QR code of this invite link")}</section>
 <form method="post" class="panel">
   <label for="name">Your name (up to 20 characters)
     <input id="name" name="name" value="${esc(name)}" maxlength="20" autocomplete="nickname" required autofocus></label>
@@ -117,8 +143,29 @@ export function pairSteps(origin: string): string {
   return `<ol>
 <li>In geow2, open <b>Help and options</b>, then <b>Online scores</b>, and enter this server's address:${linkBox(host)}</li>
 <li>Choose <b>Pair this device</b>. The game shows a code and a QR code.</li>
-<li>Type the code below, or scan the QR code with a phone signed in to this page.</li>
+<li>Scan the QR code with your phone, signed in here, and confirm. Or type the code below.</li>
 </ol>`;
+}
+
+// On a computer: a one-time link that signs your phone in as you, so you can
+// pair by scanning from then on.
+const phonePanel = (name: string, csrf: string) => `<section class="panel tip computer-only"><h2>Sign in on your phone</h2>
+<p>Pairing is quickest with your phone: scan the QR code the game shows and confirm. Sign your phone in as
+<b>${esc(name)}</b> once, with a code to scan.</p>
+<form method="post" action="/me/phone"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<button type="submit">Show a code for my phone</button></form></section>`;
+
+export function phonePage(group: string, name: string, url: string): string {
+  return page(
+    group,
+    "Sign in on your phone",
+    `<h1>Sign in on your phone</h1>
+<section class="panel"><p>Scan this with your phone's camera and choose <b>Sign in</b>: your phone is then signed in as
+<b>${esc(name)}</b>, and stays signed in here too.</p>
+${qrSvg(url, "QR code of a sign-in link")}
+<p>Or open this link on the phone. It works once, for a day.</p>${linkBox(url)}</section>
+<p><a href="/me">Back to your page</a></p>`,
+  );
 }
 
 export function mePage(
@@ -142,6 +189,7 @@ export function mePage(
     name,
     `<h1>${esc(name)}</h1>
 ${notice ? `<p>${notice}</p>` : ""}
+${phonePanel(name, csrf)}
 <section class="panel"><h2>Pair a device</h2>${pairSteps(origin)}
 <form method="get" action="/pair"><label for="code">Code shown in the game
 <input id="code" name="code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></label>
@@ -248,7 +296,8 @@ ${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin
     "Admin",
     `<h1>Admin</h1>${notice ? `<p>${notice}</p>` : ""}
 <section class="panel"><h2>Invite people</h2>
-<p>An invite link lets each person who opens it join with a name of their choice. Send it to your friends.</p>
+<p>An invite link lets each person who opens it join with a name of their choice. Send it to your friends, to open
+on their phones: the browser they join in is the one that pairs their devices, by scanning a QR code in the game.</p>
 <form method="post" action="/admin/invites">${hidden}
 <label for="uses">How many people can join with it<input id="uses" name="uses" type="number" min="1" max="100" value="5"></label>
 <label for="days">Valid for (days)<input id="days" name="days" type="number" min="1" max="365" value="14"></label>

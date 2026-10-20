@@ -24,15 +24,23 @@ plan, which covers a group many times over.
 3. Your server's address is shown when the deploy finishes, something like
    `https://geow2-scores.<your-account>.workers.dev`. Open
    `<that address>/admin` and sign in with the admin secret.
-4. Make an invite link and send it to your friends, and open it yourself
-   on your phone. Each person chooses the name the others will see.
+4. Make an invite link and send it to your friends. Join yourself too:
+   the admin page shows the new link as a QR code to scan with your phone.
+   Each person chooses the name the others will see.
+
+Invites are best opened on a phone: the browser someone joins in is the
+one that pairs their devices, and with a phone that's one scan of the QR
+code the game shows. On a computer the invite page offers a QR code to
+carry it over to the phone, and a player who joined on a computer can
+sign their phone in from their page (**Show a code for my phone**).
 
 ## Pairing a device
 
 In geow2: **Help and options**, then **Online scores**. Enter your
 server's address once, then choose **Pair this device**. The game shows a
-code and a QR code: scan it with the phone you joined on (or type the code
-on your page there) and confirm. Do the same on each device you play on.
+code and a QR code: scan it with the phone you joined on and confirm (or,
+in the browser you joined in, type the code on your page). Do the same on
+each device you play on.
 
 From then on the game syncs in the background when it starts and after
 each game: your games, unlocks and achievements from every device add up,

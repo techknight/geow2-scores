@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "hono": "4.13.13"
+    "hono": "4.13.13",
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",

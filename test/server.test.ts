@@ -160,6 +160,29 @@ describe("geow2-scores", () => {
     expect(names).toEqual(["Same Score A", "Same Score B"]);
   });
 
+  it("signs in a phone for a player who joined on a computer", async () => {
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const code = await invite(admin, 1);
+    // The invite page offers a QR code of itself, for joining on a phone.
+    const invitePage = await (await new Browser().fetch(`/invite/${code}`)).text();
+    expect(invitePage).toContain('<svg class="qr"');
+    const computer = new Browser();
+    expect((await computer.post(`/invite/${code}`, { name: "Desk Pilot" })).status).toBe(302);
+    const csrf = await computer.csrf("/me");
+    expect((await computer.post("/me/phone", {})).status).toBe(403);
+    const shown = await (await computer.post("/me/phone", { csrf })).text();
+    expect(shown).toContain('<svg class="qr"');
+    const signin = /\/signin\/([A-Z0-9]+)/.exec(shown)![1];
+    const phone = new Browser();
+    expect((await phone.post(`/signin/${signin}`, {})).status).toBe(302);
+    expect(await (await phone.fetch("/me")).text()).toContain("Desk Pilot");
+    await pair(phone, "Mac");
+    // One use only; the computer stays signed in.
+    expect((await new Browser().post(`/signin/${signin}`, {})).status).toBe(404);
+    expect((await computer.fetch("/me")).status).toBe(200);
+  });
+
   it("turns away expired invites, unknown codes and missing sessions", async () => {
     const admin = new Browser();
     await admin.post("/admin/login", { secret: "test admin secret" });
