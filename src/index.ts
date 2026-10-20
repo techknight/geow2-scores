@@ -305,8 +305,10 @@ const clamp = (v: unknown, lo: number, hi: number, d: number) => {
 
 app.post("/admin/invites", (c) =>
   adminAction(c, async (b) => {
-    const code = await store.createInvite(c.env.DB, clamp(b.days, 1, 365, 14), clamp(b.uses, 1, 100, 5));
-    return `Invite link: <span class="code">${pages.esc(new URL(c.req.url).origin)}/invite/${code}</span>`;
+    const uses = clamp(b.uses, 1, 100, 5), days = clamp(b.days, 1, 365, 14);
+    const code = await store.createInvite(c.env.DB, days, uses);
+    return `New invite link, for ${uses} ${uses === 1 ? "person" : "people"}, valid for ${days} ${days === 1 ? "day" : "days"}:` +
+      pages.linkBox(`${new URL(c.req.url).origin}/invite/${code}`);
   }),
 );
 app.post("/admin/invites/:code/delete", (c) => adminAction(c, () => store.deleteInvite(c.env.DB, c.req.param("code"))));
@@ -320,7 +322,7 @@ app.post("/admin/players/:id/rename", (c) =>
 app.post("/admin/players/:id/signin", (c) =>
   adminAction(c, async () => {
     const code = await store.createInvite(c.env.DB, 7, 1, c.req.param("id"));
-    return `Sign-in link (one use, seven days): <span class="code">${pages.esc(new URL(c.req.url).origin)}/signin/${code}</span>`;
+    return `Sign-in link (one use, seven days):` + pages.linkBox(`${new URL(c.req.url).origin}/signin/${code}`);
   }),
 );
 app.post("/admin/players/:id/remove", (c) => adminAction(c, () => store.removePlayer(c.env.DB, c.req.param("id"))));

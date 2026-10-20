@@ -13,9 +13,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  "vars": {
-    "GROUP_NAME": "geow2 scores"
-  }
-  // ADMIN_SECRET is a secret: `npx wrangler secret put ADMIN_SECRET`
-  // (the Deploy to Cloudflare button asks for it).
+  // GROUP_NAME (the group's name; "geow2 scores" when unset) and
+  // ADMIN_SECRET are set in the dashboard (Settings, Variables and Secrets)
+  // or asked for by the Deploy to Cloudflare button (.dev.vars.example);
+  // deploys keep them.
+  "keep_vars": true
 }

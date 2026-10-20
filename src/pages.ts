@@ -42,7 +42,31 @@ th { color: var(--dim); font-weight: 400; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .wrap { overflow-x: auto; }
 ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.link { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+.link input { flex: 1; min-width: 0; font: 14px/1.4 ui-monospace, Consolas, monospace; color: var(--cyan); padding: 8px 10px; }
+.link button { padding: 6px 14px; flex: none; }
+.invite { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--edge); }
+.invite .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--dim); font-size: 14px; }
 `;
+
+// Copy buttons for .link boxes (the clipboard needs https, which the
+// deployed server has; otherwise the text is selected for copying by hand).
+const SCRIPT = `<script>
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-copy]");
+  if (!b) return;
+  const input = b.parentElement.querySelector("input");
+  try { await navigator.clipboard.writeText(input.value); b.textContent = "Copied"; }
+  catch { input.focus(); input.select(); b.textContent = "Selected"; }
+  setTimeout(() => { b.textContent = "Copy"; }, 1600);
+});
+</script>`;
+
+// A link to send: on its own line, selected whole when tapped, with a Copy button.
+export function linkBox(url: string): string {
+  return `<div class="link"><input readonly value="${esc(url)}" aria-label="Link" onfocus="this.select()">` +
+    `<button type="button" class="quiet" data-copy>Copy</button></div>`;
+}
 
 export function page(group: string, title: string, body: string): string {
   // "<group> · geow2 scores", or just the one name while the group has the
@@ -52,7 +76,7 @@ export function page(group: string, title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>${esc(title === group ? title : `${title} · ${group}`)}</title><style>${STYLE}</style></head>
-<body><main><p class="group">${esc(label)}</p>${body}</main></body></html>`;
+<body><main><p class="group">${esc(label)}</p>${body}</main>${SCRIPT}</body></html>`;
 }
 
 export function message(group: string, title: string, text: string, extra = ""): string {
@@ -188,9 +212,9 @@ export function adminPage(
     `<form method="post" action="${action}" class="inline">${hidden}<button class="quiet" type="submit">${label}</button></form>`;
   const invites = data.invites
     .map(
-      (i) => `<tr><td class="code">${esc(origin)}/${i.player ? "signin" : "invite"}/${esc(i.code)}</td>
-<td>${i.player ? `sign in as ${esc(i.name)}` : `${i.max_uses - i.uses} join(s) left`}, until ${date(i.expires)}</td>
-<td>${button(`/admin/invites/${esc(i.code)}/delete`, "Delete")}</td></tr>`,
+      (i) => `<div class="invite">${linkBox(`${origin}/${i.player ? "signin" : "invite"}/${i.code}`)}
+<div class="meta"><span>${i.player ? `Signs in as ${esc(i.name)}` : `${i.max_uses - i.uses} more can join`}, until ${date(i.expires)}</span>
+${button(`/admin/invites/${esc(i.code)}/delete`, "Delete")}</div></div>`,
     )
     .join("");
   const players = data.players
@@ -223,7 +247,7 @@ ${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin
 <label for="uses">How many people can join with it<input id="uses" name="uses" type="number" min="1" max="100" value="5"></label>
 <label for="days">Valid for (days)<input id="days" name="days" type="number" min="1" max="365" value="14"></label>
 <button type="submit">Make an invite link</button></form>
-${invites ? `<div class="wrap"><table>${invites}</table></div>` : ""}</section>
+${invites ? `<div>${invites}</div>` : ""}</section>
 <section class="panel"><h2>Players</h2>
 ${players ? `<div class="wrap"><table><tr><th>Name</th><th>Games</th><th>Devices</th><th></th></tr>${players}</table></div>` : "<p>Nobody yet.</p>"}
 <p>A sign-in link signs a player's new phone in as them (for example when they lost the old one).</p></section>

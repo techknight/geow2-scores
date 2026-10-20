@@ -61,8 +61,12 @@ You need Node.js 22 or later.
 
     npm install
     npx wrangler login
-    npx wrangler secret put ADMIN_SECRET
     npm run deploy
+    npx wrangler secret put ADMIN_SECRET
+    npx wrangler secret put GROUP_NAME
+
+(or set the two in the dashboard: the Worker's Settings, Variables and
+Secrets). Deploying again keeps them.
 
 `npm run dev` runs it locally with a local database; `npm test` runs the
 tests.
