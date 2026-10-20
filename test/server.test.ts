@@ -126,11 +126,21 @@ describe("geow2-scores", () => {
     expect(boards[0].map((r: any) => [r.name, r.score])).toEqual([["Pilot One", 7000], ["Copilot", 6000]]);
     expect(boards[5].map((r: any) => r.score)).toEqual([900]);
 
+    // The admin deletes the 7,000: the player's next best takes its place,
+    // and the game sent again stays out.
+    const adminPage = await (await admin.fetch("/admin")).text();
+    const seq = /7,000<\/td>\s*<td>[^<]*<\/td><td><form method="post" action="\/admin\/scores\/(\d+)\/remove"/.exec(adminPage)![1];
+    const adminCsrf = await admin.csrf("/admin");
+    expect((await admin.post(`/admin/scores/${seq}/remove`, { csrf: adminCsrf })).status).toBe(302);
+    await api("/api/sync", { events: [event("b1", 0, 7000)], progress: {}, since: 0 }, deck);
+    const after = (await (await api("/api/sync", { events: [], progress: {}, since: 0 }, pc)).json<any>()).boards;
+    expect(after[0].map((r: any) => [r.name, r.score])).toEqual([["Copilot", 6000], ["Pilot One", 5000]]);
+
     // Renaming shows on the boards.
     const csrf = await phone.csrf("/me");
     expect((await phone.post("/me/name", { csrf, name: "Ace" })).status).toBe(302);
     const renamed = (await (await api("/api/sync", { events: [], progress: {}, since: 0 }, pc)).json<any>()).boards;
-    expect(renamed[0][0].name).toBe("Ace");
+    expect(renamed[0].map((r: any) => r.name)).toEqual(["Copilot", "Ace"]);
 
     // An unpaired device is turned away.
     expect((await api("/api/sync", { events: [] }, "not a token")).status).toBe(401);

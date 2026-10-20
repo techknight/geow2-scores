@@ -58,6 +58,20 @@ devices and delete scores.
 Scores are trusted as they come from the game: this is for friends, not
 a public leaderboard.
 
+## How big a group
+
+Up to about 50 people fits comfortably in Cloudflare's free plan. A
+device syncs when the game starts, after each game and every five
+minutes while it sits in the menus. Each sync reads about seven rows of
+the database per player in the group and writes a few, against the free
+plan's 5 million rows read, 100,000 rows written and 100,000 requests a
+day. A larger group still fits if people don't leave the game open in the
+menus all day.
+
+If a day's allowance runs out, syncs fail until it resets (at midnight
+UTC). Nothing is lost: each device keeps its games and sends them at the
+next sync. Cloudflare's paid Workers plan raises the limits.
+
 ## Updating
 
 Your copy of this repository is yours. To take a newer version, sync your

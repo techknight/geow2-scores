@@ -253,11 +253,35 @@ export async function addEvents(db: D1Database, player: string, events: ScoreEve
   const insert = db.prepare(
     "INSERT OR IGNORE INTO scores (id, player, mode, score, multiplier, time, device, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   );
+  // The player's best for the mode, from the stored row: a game the admin
+  // removed and a device sends again stays out.
+  const best = db.prepare(
+    `INSERT INTO bests (player, mode, score, multiplier, time)
+       SELECT player, mode, score, multiplier, time FROM scores WHERE player = ? AND id = ? AND removed = 0
+     ON CONFLICT (player, mode) DO UPDATE SET score = excluded.score, multiplier = excluded.multiplier, time = excluded.time
+       WHERE excluded.score > bests.score OR (excluded.score = bests.score AND excluded.time < bests.time)`,
+  );
   // D1 takes a batch as one transaction; large uploads in slices.
-  for (let i = 0; i < events.length; i += 50)
+  for (let i = 0; i < events.length; i += 25)
     await db.batch(
-      events.slice(i, i + 50).map((e) => insert.bind(e.id, player, e.mode, e.score, e.multiplier, e.time, e.device, e.name)),
+      events
+        .slice(i, i + 25)
+        .flatMap((e) => [insert.bind(e.id, player, e.mode, e.score, e.multiplier, e.time, e.device, e.name), best.bind(player, e.id)]),
     );
+}
+
+// A player's best for one mode again from their games (after a removal).
+function rebuildBest(db: D1Database, player: string, mode: number) {
+  return [
+    db.prepare("DELETE FROM bests WHERE player = ? AND mode = ?").bind(player, mode),
+    db
+      .prepare(
+        `INSERT INTO bests (player, mode, score, multiplier, time)
+           SELECT player, mode, score, multiplier, time FROM scores WHERE player = ? AND mode = ? AND removed = 0
+           ORDER BY score DESC, time ASC LIMIT 1`,
+      )
+      .bind(player, mode),
+  ];
 }
 
 export async function eventsSince(db: D1Database, player: string, since: number, limit = 1000) {
@@ -296,13 +320,11 @@ export async function mergeProgress(db: D1Database, player: string, p: Progress)
 
 // The group's boards: per mode, each player's best game, best first.
 export async function boards(db: D1Database, rows = 100): Promise<BoardRow[][]> {
-  // (SQLite takes the bare columns from the row holding the MAX.)
   const r = await db
     .prepare(
-      `SELECT s.mode, s.player, p.name, MAX(s.score) AS score, s.multiplier, s.time
-       FROM scores s JOIN players p ON p.id = s.player
-       WHERE s.removed = 0 AND p.removed = 0
-       GROUP BY s.mode, s.player`,
+      `SELECT b.mode, b.player, p.name, b.score, b.multiplier, b.time
+       FROM bests b JOIN players p ON p.id = b.player
+       WHERE p.removed = 0`,
     )
     .all<BoardRow & { mode: number }>();
   const out: BoardRow[][] = [[], [], [], [], [], []];
@@ -327,5 +349,7 @@ export async function recentScores(db: D1Database, limit = 50) {
 
 // By the row's seq: a game id is unique only for its player.
 export async function removeScore(db: D1Database, seq: number): Promise<void> {
-  await db.prepare("UPDATE scores SET removed = 1 WHERE seq = ?").bind(seq).run();
+  const row = await db.prepare("SELECT player, mode FROM scores WHERE seq = ?").bind(seq).first<{ player: string; mode: number }>();
+  if (!row) return;
+  await db.batch([db.prepare("UPDATE scores SET removed = 1 WHERE seq = ?").bind(seq), ...rebuildBest(db, row.player, row.mode)]);
 }
