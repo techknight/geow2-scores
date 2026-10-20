@@ -141,7 +141,8 @@ export function signInPage(group: string, name: string): string {
 export function pairSteps(origin: string): string {
   const host = origin.replace(/^https?:\/\//, "");
   return `<ol>
-<li>In geow2, open <b>Help and options</b>, then <b>Online scores</b>, and enter this server's address:${linkBox(host)}</li>
+<li>In geow2, open <b>Help and options</b>, then <b>Online scores</b>, and enter this server's address. On the
+same computer, copy it here and paste it in the game with Ctrl+V (Cmd+V on a Mac):${linkBox(host)}</li>
 <li>Choose <b>Pair this device</b>. The game shows a code and a QR code.</li>
 <li>Scan the QR code with your phone, signed in here, and confirm. Or type the code below.</li>
 </ol>`;
