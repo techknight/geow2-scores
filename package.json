@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
-    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "deploy": "wrangler deploy && wrangler d1 migrations apply geow2-scores --remote",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
