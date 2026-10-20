@@ -70,8 +70,9 @@ export function qrSvg(text: string, label: string): string {
 }
 
 // Copy buttons for .link boxes (the clipboard needs https, which the
-// deployed server has; otherwise the text is selected for copying by hand).
-const SCRIPT = `<script>
+// deployed server has; otherwise the text is selected for copying by hand),
+// and a link box's text selected whole when it gets the focus.
+export const SCRIPT_BODY = `
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-copy]");
   if (!b) return;
@@ -80,11 +81,21 @@ document.addEventListener("click", async (e) => {
   catch { input.focus(); input.select(); b.textContent = "Selected"; }
   setTimeout(() => { b.textContent = "Copy"; }, 1600);
 });
-</script>`;
+document.addEventListener("focusin", (e) => { if (e.target.matches(".link input")) e.target.select(); });
+`;
+const SCRIPT = `<script>${SCRIPT_BODY}</script>`;
+
+// The Content-Security-Policy every response carries: the pages' own inline
+// styles and the one script above (by its SHA-256, checked by the tests), no
+// other sources, forms only to this server, and no framing.
+export const SCRIPT_HASH = "sha256-Wy6dQ+7y/KC7EOZjKC5JsXbLKmx6YAqFyX+RNVsBJfA=";
+export const CSP =
+  `default-src 'none'; script-src '${SCRIPT_HASH}'; style-src 'unsafe-inline'; form-action 'self'; ` +
+  "frame-ancestors 'none'; base-uri 'none'";
 
 // A link to send: on its own line, selected whole when tapped, with a Copy button.
 export function linkBox(url: string): string {
-  return `<div class="link"><input readonly value="${esc(url)}" aria-label="Link" onfocus="this.select()">` +
+  return `<div class="link"><input readonly value="${esc(url)}" aria-label="Link">` +
     `<button type="button" class="quiet" data-copy>Copy</button></div>`;
 }
 
@@ -254,6 +265,7 @@ export function adminPage(
   group: string,
   origin: string,
   csrf: string,
+  shortSecret: boolean,
   data: {
     players: { id: string; name: string; created: number; devices: number; games: number }[];
     invites: { code: string; player: string | null; name: string | null; expires: number; max_uses: number; uses: number }[];
@@ -277,7 +289,8 @@ ${button(`/admin/invites/${esc(i.code)}/delete`, "Delete")}</div></div>`,
       (p) => `<tr><td>${esc(p.name)}</td><td class="num">${p.games}</td><td class="num">${p.devices}</td>
 <td><form method="post" action="/admin/players/${esc(p.id)}/rename" class="inline">${hidden}
 <input name="name" value="${esc(p.name)}" maxlength="20" style="width:9em;padding:4px 6px"> <button class="quiet" type="submit">Rename</button></form>
-${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin/players/${esc(p.id)}/remove`, "Remove")}</td></tr>`,
+${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin/players/${esc(p.id)}/signout`, "Sign out")}
+${button(`/admin/players/${esc(p.id)}/remove`, "Remove")}</td></tr>`,
     )
     .join("");
   const devices = data.devices
@@ -296,6 +309,8 @@ ${button(`/admin/players/${esc(p.id)}/signin`, "Sign-in link")} ${button(`/admin
     group,
     "Admin",
     `<h1>Admin</h1>${notice ? `<p>${notice}</p>` : ""}
+${shortSecret ? `<p class="error">The admin secret is short, so it could be guessed. Set a longer one (at least 16
+characters, random is best) in the Worker's settings: Settings, Variables and Secrets, ADMIN_SECRET.</p>` : ""}
 <section class="panel"><h2>Invite people</h2>
 <p>An invite link lets each person who opens it join with a name of their choice. Send it to your friends, to open
 on their phones: the browser they join in is the one that pairs their devices, by scanning a QR code in the game.</p>
@@ -306,7 +321,8 @@ on their phones: the browser they join in is the one that pairs their devices, b
 ${invites ? `<div>${invites}</div>` : ""}</section>
 <section class="panel"><h2>Players</h2>
 ${players ? `<div class="wrap"><table><tr><th>Name</th><th>Games</th><th>Devices</th><th></th></tr>${players}</table></div>` : "<p>Nobody yet.</p>"}
-<p>A sign-in link signs a player in on another phone or computer (for example when they lost the old one).</p></section>
+<p>A sign-in link signs a player in on another phone or computer (for example when they lost the old one).
+Sign out signs them out of every browser; their devices stay paired.</p></section>
 <section class="panel"><h2>Devices</h2>
 ${devices ? `<div class="wrap"><table><tr><th>Player</th><th>Device</th><th>Last sync</th><th></th></tr>${devices}</table></div>` : "<p>None yet.</p>"}</section>
 <section class="panel"><h2>Latest games</h2>

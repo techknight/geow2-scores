@@ -34,6 +34,26 @@ function startSession(c: Context<{ Bindings: Env }>, token: string, admin: boole
   });
 }
 
+// Every response: never cached (pages carry codes, QR codes and form
+// tokens), never framed, no referrer to other sites (codes travel in URLs;
+// "same-origin" rather than "no-referrer", under which browsers send
+// "Origin: null" with the pages' own forms), and only the pages' own
+// script. Forms are posted only from this server's pages: a POST from
+// another site (signing a visitor's browser in with someone else's invite,
+// say) is refused. The game's API sends no Origin.
+app.use("*", async (c, next) => {
+  if (c.req.method === "POST" && !c.req.path.startsWith("/api/")) {
+    const origin = c.req.header("origin");
+    if (origin && origin !== new URL(c.req.url).origin) return c.text("Forbidden", 403);
+  }
+  await next();
+  c.header("Cache-Control", "no-store");
+  c.header("Content-Security-Policy", pages.CSP);
+  c.header("Referrer-Policy", "same-origin");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+});
+
 // A form posted by a page of ours: its csrf field matches the session's.
 async function form(c: Context<{ Bindings: Env }>, s: { csrf: string } | null) {
   const body = await c.req.parseBody();
@@ -57,6 +77,10 @@ app.post("/api/pair/poll", async (c) => {
   if (typeof body.poll !== "string") return c.json({ error: "poll token missing" }, 400);
   return c.json(await store.pollPairing(c.env.DB, body.poll));
 });
+
+// Games taken from one sync. The game sends at most 200 at a time; earlier
+// versions sent everything unsent at once.
+const MAX_EVENTS = 5000;
 
 const int = (v: unknown, min: number, max: number) =>
   typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : null;
@@ -84,6 +108,8 @@ function readProgress(v: any): Progress {
 
 // The device's new games and progress in; everything the player has from
 // other devices since `since`, the merged progress and the group's boards out.
+// `taken` says how many of the games sent were dealt with (stored, already
+// there, or refused as malformed), so the device sends the rest next time.
 app.post("/api/sync", async (c) => {
   const auth = c.req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
@@ -91,7 +117,7 @@ app.post("/api/sync", async (c) => {
   if (!device) return c.json({ error: "This device is not paired (or was unpaired). Pair it again." }, 401);
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: "bad request" }, 400);
-  const sent: unknown[] = Array.isArray(body.events) ? body.events.slice(0, 5000) : [];
+  const sent: unknown[] = Array.isArray(body.events) ? body.events.slice(0, MAX_EVENTS) : [];
   const events = sent.map(readEvent).filter((e): e is ScoreEvent => e !== null);
   await store.addEvents(c.env.DB, device.player, events);
   const progress = await store.mergeProgress(c.env.DB, device.player, readProgress(body.progress));
@@ -99,6 +125,7 @@ app.post("/api/sync", async (c) => {
   const theirs = await store.eventsSince(c.env.DB, device.player, since);
   return c.json({
     group: group(c),
+    taken: sent.length,
     player: { id: device.player, name: device.name },
     events: theirs.map(({ seq, ...e }) => e),
     cursor: theirs.length ? theirs[theirs.length - 1].seq : since,
@@ -270,10 +297,16 @@ async function adminSession(c: Context<{ Bindings: Env }>) {
   return s?.admin ? s : null;
 }
 
+// A secret shorter than this is flagged on the admin page: guesses are
+// limited only by the free plan's 100,000 requests a day.
+const SECRET_MIN = 16;
+
 async function adminView(c: Context<{ Bindings: Env }>, csrf: string, notice = "") {
   const db = c.env.DB;
+  await store.cleanUp(db);
+  const short = (c.env.ADMIN_SECRET ?? "").length < SECRET_MIN;
   return c.html(
-    pages.adminPage(group(c), new URL(c.req.url).origin, csrf, {
+    pages.adminPage(group(c), new URL(c.req.url).origin, csrf, short, {
       players: await store.listPlayers(db),
       invites: await store.listInvites(db),
       devices: await store.listDevices(db, null),
@@ -337,6 +370,7 @@ app.post("/admin/players/:id/signin", (c) =>
     return `Sign-in link (one use, seven days):` + pages.linkBox(`${new URL(c.req.url).origin}/signin/${code}`);
   }),
 );
+app.post("/admin/players/:id/signout", (c) => adminAction(c, () => store.signOutPlayer(c.env.DB, c.req.param("id"))));
 app.post("/admin/players/:id/remove", (c) => adminAction(c, () => store.removePlayer(c.env.DB, c.req.param("id"))));
 app.post("/admin/devices/:id/revoke", (c) => adminAction(c, () => store.revokeDevice(c.env.DB, c.req.param("id"), null)));
 app.post("/admin/scores/:seq/remove", (c) =>

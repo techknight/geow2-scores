@@ -187,17 +187,40 @@ export async function getPairing(db: D1Database, code: string) {
 
 // A signed-in player confirms: the device row is made now and its token
 // waits in the pairing until the game collects it.
+// Both statements test that the pairing is still waiting, in one
+// transaction, so two confirmations at once make only one device.
 export async function confirmPairing(db: D1Database, code: string, player: string): Promise<boolean> {
-  const p = await getPairing(db, code);
-  if (!p || p.player) return false;
   const token = randomToken();
-  await db.batch([
+  const t = now();
+  const [device] = await db.batch([
     db
-      .prepare("INSERT INTO devices (id, token_hash, player, name, created) VALUES (?, ?, ?, ?, ?)")
-      .bind(randomId(), await sha256(token), player, p.device_name, now()),
-    db.prepare("UPDATE pairings SET player = ?, device_token = ? WHERE code = ?").bind(player, token, code),
+      .prepare(
+        `INSERT INTO devices (id, token_hash, player, name, created)
+           SELECT ?, ?, ?, device_name, ? FROM pairings WHERE code = ? AND player IS NULL AND expires > ?`,
+      )
+      .bind(randomId(), await sha256(token), player, t, code, t),
+    db
+      .prepare("UPDATE pairings SET player = ?, device_token = ? WHERE code = ? AND player IS NULL AND expires > ?")
+      .bind(player, token, code, t),
   ]);
-  return true;
+  return (device.meta.changes ?? 0) > 0;
+}
+
+// Rows that can no longer be used: expired sessions, spent or expired
+// invites and sign-in links, and expired pairings (a confirmed one never
+// collected holds a device's token). Run when the admin page opens.
+export async function cleanUp(db: D1Database): Promise<void> {
+  const t = now();
+  await db.batch([
+    db.prepare("DELETE FROM sessions WHERE expires <= ?").bind(t),
+    db.prepare("DELETE FROM invites WHERE expires <= ? OR uses >= max_uses").bind(t),
+    db.prepare("DELETE FROM pairings WHERE expires <= ?").bind(t),
+  ]);
+}
+
+// Signs a player out of every browser (a lost phone, say).
+export async function signOutPlayer(db: D1Database, player: string): Promise<void> {
+  await db.prepare("DELETE FROM sessions WHERE player = ?").bind(player).run();
 }
 
 export type PollResult =
@@ -248,26 +271,33 @@ export async function revokeDevice(db: D1Database, id: string, player: string | 
 
 // --- Games and progress ------------------------------------------------------
 
+// All of a sync's games in two statements, whatever their number (the free
+// plan allows 50 queries a request): the games go in as one JSON array.
 export async function addEvents(db: D1Database, player: string, events: ScoreEvent[]): Promise<void> {
   if (!events.length) return;
-  const insert = db.prepare(
-    "INSERT OR IGNORE INTO scores (id, player, mode, score, multiplier, time, device, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-  );
-  // The player's best for the mode, from the stored row: a game the admin
-  // removed and a device sends again stays out.
-  const best = db.prepare(
-    `INSERT INTO bests (player, mode, score, multiplier, time)
-       SELECT player, mode, score, multiplier, time FROM scores WHERE player = ? AND id = ? AND removed = 0
-     ON CONFLICT (player, mode) DO UPDATE SET score = excluded.score, multiplier = excluded.multiplier, time = excluded.time
-       WHERE excluded.score > bests.score OR (excluded.score = bests.score AND excluded.time < bests.time)`,
-  );
-  // D1 takes a batch as one transaction; large uploads in slices.
-  for (let i = 0; i < events.length; i += 25)
-    await db.batch(
-      events
-        .slice(i, i + 25)
-        .flatMap((e) => [insert.bind(e.id, player, e.mode, e.score, e.multiplier, e.time, e.device, e.name), best.bind(player, e.id)]),
-    );
+  const json = JSON.stringify(events);
+  await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO scores (id, player, mode, score, multiplier, time, device, name)
+           SELECT value ->> '$.id', ?1, value ->> '$.mode', value ->> '$.score', value ->> '$.multiplier',
+                  value ->> '$.time', value ->> '$.device', value ->> '$.name'
+           FROM json_each(?2) ORDER BY key`,
+      )
+      .bind(player, json),
+    // The player's bests, from the stored rows: a game the admin removed and
+    // a device sends again stays out.
+    db
+      .prepare(
+        `INSERT INTO bests (player, mode, score, multiplier, time)
+           SELECT player, mode, score, multiplier, time FROM scores
+           WHERE player = ?1 AND removed = 0 AND id IN (SELECT value ->> '$.id' FROM json_each(?2))
+           ORDER BY score DESC, time ASC
+         ON CONFLICT (player, mode) DO UPDATE SET score = excluded.score, multiplier = excluded.multiplier, time = excluded.time
+           WHERE excluded.score > bests.score OR (excluded.score = bests.score AND excluded.time < bests.time)`,
+      )
+      .bind(player, json),
+  ]);
 }
 
 // A player's best for one mode again from their games (after a removal).

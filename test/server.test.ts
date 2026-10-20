@@ -3,6 +3,7 @@
 
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import * as pages from "../src/pages";
 
 const BASE = "https://scores.example";
 
@@ -191,6 +192,81 @@ describe("geow2-scores", () => {
     // One use only; the computer stays signed in.
     expect((await new Browser().post(`/signin/${signin}`, {})).status).toBe(404);
     expect((await computer.fetch("/me")).status).toBe(200);
+  });
+
+  it("sends the security headers, and the script matches its CSP hash", async () => {
+    for (const path of ["/", "/admin", "/api/info"]) {
+      const r = await new Browser().fetch(path);
+      expect(r.headers.get("cache-control")).toBe("no-store");
+      expect(r.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      expect(r.headers.get("referrer-policy")).toBe("same-origin");
+      expect(r.headers.get("x-frame-options")).toBe("DENY");
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pages.SCRIPT_BODY));
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    expect(pages.SCRIPT_HASH).toBe(`sha256-${b64}`);
+  });
+
+  it("refuses forms posted from another site", async () => {
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const code = await invite(admin, 2);
+    const victim = new Browser();
+    const r = await victim.fetch(`/invite/${code}`, {
+      method: "POST",
+      headers: { origin: "https://evil.example" },
+      body: new URLSearchParams({ name: "Tricked" }),
+    });
+    expect(r.status).toBe(403);
+    expect(victim.cookie).toBe("");
+    const ok = await victim.fetch(`/invite/${code}`, {
+      method: "POST",
+      headers: { origin: BASE },
+      body: new URLSearchParams({ name: "Same Site" }),
+    });
+    expect(ok.status).toBe(302);
+  });
+
+  it("takes a large upload in one sync, and says how many it took", async () => {
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const phone = new Browser();
+    await phone.post(`/invite/${await invite(admin, 1)}`, { name: "Long History" });
+    const token = await pair(phone, "Old PC");
+    const events = Array.from({ length: 300 }, (_, i) => event(`e${i.toString(16).padStart(4, "0")}`, i % 6, 1000 + i));
+    const r = await (await api("/api/sync", { events: [...events, { id: "bad" }], progress: {}, since: 0 }, token)).json<any>();
+    expect(r.taken).toBe(301);
+    expect(r.events).toHaveLength(300);
+    // Each mode's best is its highest of the 300.
+    const mine = (r.boards as any[][]).map((b) => b.find((row) => row.name === "Long History")?.score);
+    expect(mine).toEqual([1294, 1295, 1296, 1297, 1298, 1299]);
+  });
+
+  it("makes one device when a pairing is confirmed twice", async () => {
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const phone = new Browser();
+    await phone.post(`/invite/${await invite(admin, 1)}`, { name: "Double Tap" });
+    const start = await (await api("/api/pair/start", { device_name: "Deck" })).json<any>();
+    const code = start.code.replace("-", "");
+    const csrf = await phone.csrf(`/pair/${code}`);
+    const [a, b] = await Promise.all([phone.post(`/pair/${code}`, { csrf }), phone.post(`/pair/${code}`, { csrf })]);
+    expect([a.status, b.status].sort()).toEqual([302, 404]);
+    const me = await (await phone.fetch("/me")).text();
+    expect(me.match(/\/revoke"/g)).toHaveLength(1);
+  });
+
+  it("signs a player out of every browser", async () => {
+    const admin = new Browser();
+    await admin.post("/admin/login", { secret: "test admin secret" });
+    const phone = new Browser();
+    await phone.post(`/invite/${await invite(admin, 1)}`, { name: "Lost Phone" });
+    expect((await phone.fetch("/me")).status).toBe(200);
+    const page = await (await admin.fetch("/admin")).text();
+    const id = /\/admin\/players\/([0-9a-f]+)\/rename" class="inline"><input type="hidden" name="csrf" value="[^"]+">\s*<input name="name" value="Lost Phone"/.exec(page)![1];
+    const csrf = await admin.csrf("/admin");
+    expect((await admin.post(`/admin/players/${id}/signout`, { csrf })).status).toBe(302);
+    expect((await phone.fetch("/me")).status).toBe(401);
   });
 
   it("turns away expired invites, unknown codes and missing sessions", async () => {
